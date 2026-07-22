@@ -29,7 +29,3 @@ Once hosted, the tool is available at:
 
 Built on [MapLibre GL JS](https://maplibre.org/) (BSD-licensed). Imagery © Esri / Maxar,
 or © Mapbox / Maxar when using the Mapbox style. Keep attribution visible.
-
-## Notes
-
-Internal design tool. Add a license before any wider/public distribution.
