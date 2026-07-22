@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# recordings / exports (keep the repo lightweight)
+*.mov
+*.mp4
+*.webm
+*.gif
+
+# local backups (git history handles versioning now)
+globe-tool-backup-*.html
+globe-tool-v*.html
+_*.png
+_*.js

@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Globe Tool — MapLibre</title>
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<style>
+  :root{
+    --phone-w: 393px;   /* iPhone 16 logical width  */
+    --phone-h: 852px;   /* iPhone 16 logical height */
+    --accent:#4c9dff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#111418;color:#eef2f7;-webkit-font-smoothing:antialiased}
+  body{display:flex;min-height:100%;align-items:flex-start;justify-content:center;gap:34px;padding:34px}
+
+  /* ---------- Phone frame (always clean) ---------- */
+  .stage{display:flex;flex-direction:column;align-items:center;gap:14px;position:sticky;top:34px}
+  .phone{
+    position:relative;
+    width:var(--phone-w);
+    height:var(--phone-h);
+    border-radius:52px;
+    overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.55), 0 0 0 11px #0b0d10, 0 0 0 13px #23262b;
+    background:#05070f;
+  }
+  .space{
+    position:absolute; inset:0; z-index:0;
+    background:radial-gradient(1200px 900px at 50% 42%, #0f1830 0%, #0a1022 45%, #060a16 100%);
+  }
+  .space::before, .space::after{content:""; position:absolute; inset:0; background-repeat:repeat}
+  .space::before{
+    background-image:
+      radial-gradient(1.4px 1.4px at 20% 30%, rgba(255,255,255,.9), transparent),
+      radial-gradient(1.2px 1.2px at 70% 15%, rgba(255,255,255,.7), transparent),
+      radial-gradient(1px 1px at 40% 70%, rgba(255,255,255,.8), transparent),
+      radial-gradient(1.3px 1.3px at 85% 60%, rgba(255,255,255,.7), transparent),
+      radial-gradient(1px 1px at 15% 85%, rgba(255,255,255,.6), transparent),
+      radial-gradient(1.1px 1.1px at 55% 45%, rgba(255,255,255,.5), transparent),
+      radial-gradient(1.5px 1.5px at 90% 25%, rgba(255,255,255,.85), transparent),
+      radial-gradient(1px 1px at 30% 12%, rgba(255,255,255,.6), transparent);
+  }
+  .space::after{
+    background-image:
+      radial-gradient(1px 1px at 10% 55%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 60% 80%, rgba(255,255,255,.45), transparent),
+      radial-gradient(1px 1px at 78% 40%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 45% 25%, rgba(255,255,255,.35), transparent),
+      radial-gradient(1px 1px at 25% 65%, rgba(255,255,255,.4), transparent);
+    opacity:.8;
+  }
+  .space.off{display:none}
+  #map{position:absolute; inset:0; z-index:1; background:transparent}
+  .maplibregl-ctrl-attrib{font-size:9px}
+  .maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right{opacity:.28; transition:opacity .2s}
+  .phone.clean .maplibregl-ctrl-bottom-left,.phone.clean .maplibregl-ctrl-bottom-right{opacity:0}
+  .stage .caption{font-size:11px;color:#5c6474}
+
+  /* ---------- Side control panel ---------- */
+  .side{width:320px}
+  .side h1{font-size:17px; color:#fff; margin:0 0 4px}
+  .side .sub{color:#8592a6; margin:0 0 16px; font-size:12.5px; line-height:1.5}
+  .card{background:#171b22; border:1px solid #262c36; border-radius:14px; padding:14px 16px; margin-bottom:12px}
+  .card h2{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:#8592a6; margin:0 0 12px}
+  label{font-size:12px; color:#aeb9cc}
+
+  .row{display:flex; gap:8px; align-items:center; margin:9px 0}
+  .row .lbl{font-size:12px; color:#aeb9cc; min-width:52px}
+  input[type=range]{flex:1; accent-color:var(--accent)}
+  .val{font-size:11px; color:#7f8ba1; min-width:52px; text-align:right; font-variant-numeric:tabular-nums}
+  input[type=text],input[type=number]{
+    background:#0e1219; border:1px solid #2b323d; color:#eef2f7; border-radius:9px;
+    padding:8px 10px; font-size:12px; width:100%;
+  }
+  select{background:#0e1219; border:1px solid #2b323d; color:#eef2f7; border-radius:8px; padding:6px 8px; font-size:12px}
+  button{
+    font:inherit; cursor:pointer; border:1px solid #2a3448; background:#182031; color:#eef2f7;
+    border-radius:10px; padding:8px 12px; font-size:12px; transition:.15s;
+  }
+  button:hover{background:#212b41}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#04122b; font-weight:600}
+  button.on{background:#1f6f3f; border-color:#2c9d59}
+  .presets{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
+  .presets button{padding:6px 10px; font-size:11px}
+  .search-wrap{position:relative}
+  .results{
+    position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:6;
+    background:#0e1524; border:1px solid #2a3448; border-radius:10px; overflow:hidden; display:none;
+    max-height:200px; overflow-y:auto;
+  }
+  .results.show{display:block}
+  .results div{padding:9px 11px; font-size:12px; cursor:pointer; border-bottom:1px solid #1b2537}
+  .results div:hover{background:#182031}
+  .field{display:flex; justify-content:space-between; align-items:center; margin:8px 0}
+  kbd{background:#0e1219; border:1px solid #2b323d; border-radius:5px; padding:1px 6px; font-size:11px}
+  ul{margin:6px 0 0; padding-left:18px; font-size:12px; color:#c7d0de; line-height:1.55}
+  li{margin:3px 0}
+  .hint{font-size:11px;color:#6b7688;margin-top:8px}
+</style>
+</head>
+<body>
+
+  <div class="stage">
+    <div class="phone clean" id="phone">
+      <div class="space" id="space"></div>
+      <div id="map"></div>
+    </div>
+    <div class="caption">Clean portrait — record just this rectangle</div>
+  </div>
+
+  <!-- ALL controls live here, outside the phone -->
+  <div class="side">
+    <h1>Globe recording tool</h1>
+    <p class="sub">The phone stays a clean globe at all times. Drive everything from these controls, then screen-record just the phone.</p>
+
+    <div class="card">
+      <h2>Snap to location</h2>
+      <div class="search-wrap">
+        <div class="row" style="margin-top:0">
+          <input type="text" id="search" placeholder="Search any place… (e.g. Tokyo)" autocomplete="off"/>
+          <button class="primary" id="goSearch">Fly</button>
+        </div>
+        <div class="results" id="results"></div>
+      </div>
+      <div class="presets" id="presets"></div>
+      <div class="row">
+        <span class="lbl">Lat/Lng</span>
+        <input type="number" id="lat" step="0.001" placeholder="lat"/>
+        <input type="number" id="lng" step="0.001" placeholder="lng"/>
+        <button id="goCoord">Go</button>
+      </div>
+      <div class="row">
+        <span class="lbl">Fly time</span>
+        <input type="range" id="flydur" min="0.5" max="8" step="0.1" value="3.5"/>
+        <span class="val" id="flydurVal">3.5s</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Target z</span>
+        <input type="range" id="flyzoom" min="2" max="8" step="0.1" value="4.4"/>
+        <span class="val" id="flyzoomVal">4.4</span>
+      </div>
+      <button id="resetBtn" style="width:100%;margin-top:4px">Reset to full globe &amp; resume spin</button>
+    </div>
+
+    <div class="card">
+      <h2>Rotation</h2>
+      <div class="row" style="margin-top:0">
+        <button id="spinBtn" class="on">Auto&nbsp;⟳</button>
+        <button id="dirBtn">Reverse</button>
+        <span class="hint" style="margin:0 0 0 auto">Space = toggle</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Speed</span>
+        <input type="range" id="speed" min="0" max="60" step="0.5" value="3"/>
+        <span class="val" id="speedVal">3°/s</span>
+      </div>
+      <p class="hint">One clean loop = 360 ÷ speed = <span id="loopSecs">60.0</span>s of footage.</p>
+    </div>
+
+    <div class="card">
+      <h2>Composition</h2>
+      <div class="row" style="margin-top:0">
+        <span class="lbl">Zoom</span>
+        <input type="range" id="zoom" min="0" max="6" step="0.01" value="1.15"/>
+        <span class="val" id="zoomVal">1.15</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Height</span>
+        <input type="range" id="offset" min="-40" max="40" step="1" value="12"/>
+        <span class="val" id="offsetVal">+12%</span>
+      </div>
+      <div class="field"><label>Star background</label><input type="checkbox" id="starsChk" checked></div>
+    </div>
+
+    <div class="card">
+      <h2>Motion — intro / outro</h2>
+      <div class="row" style="margin-top:0">
+        <button id="scaleIn" style="flex:1">⤢ Scale in (grow)</button>
+      </div>
+      <div class="row">
+        <button id="animIn" style="flex:1">↑ Slide in</button>
+        <button id="animOut" style="flex:1">↑ Slide out</button>
+      </div>
+      <div class="row">
+        <span class="lbl">Duration</span>
+        <input type="range" id="slideDur" min="0.5" max="10" step="0.1" value="5.5"/>
+        <span class="val" id="slideDurVal">5.5s</span>
+      </div>
+      <p class="hint">Scale in: grows from tiny to default size while slowly rotating. Slide in/out: rises from below, or lifts off the top.</p>
+    </div>
+
+    <div class="card">
+      <h2>Output</h2>
+      <div class="field"><label>Device frame</label>
+        <select id="device">
+          <option value="393x852">iPhone 16 / 15 (393×852)</option>
+          <option value="402x874">iPhone 16 Pro (402×874)</option>
+          <option value="440x956">iPhone 17 Pro Max (440×956)</option>
+          <option value="430x932">iPhone 15 Pro Max (430×932)</option>
+        </select>
+      </div>
+      <div class="field"><label>Map style</label>
+        <select id="src">
+          <option value="esri">Esri Satellite (free, no token)</option>
+          <option value="mapbox">Mapbox Satellite Streets (your token)</option>
+        </select>
+      </div>
+      <div class="row" id="tokenRow" style="display:none">
+        <input type="text" id="token" placeholder="pk.your_mapbox_token"/>
+        <button id="applyToken">Apply</button>
+      </div>
+      <p class="hint">Mapbox needs your own free token — the public demo token is blocked outside mapbox.com. Paste yours and hit Apply.</p>
+    </div>
+
+    <div class="card">
+      <h2>Record → MP4</h2>
+      <div class="row" style="margin-top:0">
+        <button class="primary" id="recBtn" style="flex:1">● Record</button>
+        <span class="val" id="recTime" style="min-width:60px">0:00</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Quality</span>
+        <input type="range" id="bitrate" min="2" max="24" step="1" value="8"/>
+        <span class="val" id="bitrateVal">8 Mbps</span>
+      </div>
+      <div class="row">
+        <span class="lbl">FPS</span>
+        <select id="fps"><option>24</option><option selected>30</option><option>60</option></select>
+        <span class="lbl" style="min-width:auto;margin-left:auto">Cap</span>
+        <select id="cap"><option value="200">200 MB</option><option value="100">100 MB (Figma)</option><option value="500">500 MB</option></select>
+      </div>
+      <div class="field"><label>Auto-stop after one full loop</label><input type="checkbox" id="autoLoop" checked></div>
+      <div class="field"><label>Preload tiles first (no pop-in)</label><input type="checkbox" id="preload" checked></div>
+      <div id="loopInfo" class="hint">Perfect loop = 60 frames · 2.0s</div>
+      <div id="recStat" class="hint">Ready · format: <span id="fmt">detecting…</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Recording notes</h2>
+      <ul>
+        <li>Hit <strong>Record</strong> above — it captures the globe + stars at the phone’s native resolution and saves an <strong>.mp4</strong> (H.264) straight to your downloads.</li>
+        <li>For a seamless background loop, tick <strong>Auto-stop after one full loop</strong>, then drag the file into a Figma frame as a fill and set it to loop.</li>
+        <li>8–12 Mbps looks great and stays small (space compresses well); the “100 MB (Figma)” cap keeps you inside Figma’s limit.</li>
+        <li>Star background off = flat dark field you can key out in Figma.</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+/* ---------------- config ---------------- */
+const ESRI = 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+// No token is committed here. Paste your own Mapbox token in the panel to use the Mapbox style.
+let MAPBOX_TOKEN = '';
+const MAPBOX_STYLE = 'satellite-streets-v11';
+
+// Esri free raster style (globe projection).
+function esriStyle(){
+  return {
+    version: 8,
+    projection: { type: 'globe' },
+    sources: { sat: { type:'raster', tiles:[ESRI], tileSize:256, maxzoom:19,
+      attribution:'Imagery © Esri, Maxar, Earthstar Geographics' } },
+    layers: [ { id:'sat', type:'raster', source:'sat' } ],
+    sky: { "atmosphere-blend": ["interpolate",["linear"],["zoom"], 0,1, 5,0.6, 7,0] },
+    light: { anchor:'map', intensity:0.2 }
+  };
+}
+// Mapbox style rendered as raster tiles (labels/roads baked in) — simple + robust, one tokenized URL.
+function mapboxStyle(){
+  return {
+    version: 8,
+    projection: { type: 'globe' },
+    sources: { sat: { type:'raster', tileSize:256, maxzoom:22,
+      tiles:[`https://api.mapbox.com/styles/v1/mapbox/${MAPBOX_STYLE}/tiles/256/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`],
+      attribution:'© Mapbox © Maxar' } },
+    layers: [ { id:'sat', type:'raster', source:'sat' } ],
+    sky: { "atmosphere-blend": ["interpolate",["linear"],["zoom"], 0,1, 5,0.6, 7,0] },
+    light: { anchor:'map', intensity:0.2 }
+  };
+}
+function styleFor(src){ return src==='mapbox' ? mapboxStyle() : esriStyle(); }
+
+/* ---------------- map ---------------- */
+let currentSrc = 'esri';   // renders with no token; switch to Mapbox after pasting your own token
+const map = new maplibregl.Map({
+  container:'map',
+  style: styleFor(currentSrc),
+  center:[10, 25],
+  zoom: 1.15,
+  attributionControl:{ compact:true },
+  dragRotate:false, pitchWithRotate:false, renderWorldCopies:false, fadeDuration:0,
+  maxPitch:85,   /* allow the steep tilt used for the 3D terrain view */
+  maxTileCacheSize:1024, refreshExpiredTiles:false,   /* keep tiles cached so they don't reload mid-record */
+  /* v5: preserveDrawingBuffer lives here — required so we can copy frames into the recorder */
+  canvasContextAttributes:{ preserveDrawingBuffer:true, antialias:true }
+});
+map.touchZoomRotate.disableRotation();
+
+// Runs on first load AND after every setStyle: keep globe projection and re-add the elevation source.
+map.on('style.load', ()=>{
+  try{ map.setProjection({ type:'globe' }); }catch(e){}
+  if(!map.getSource('dem')){
+    map.addSource('dem', { type:'raster-dem', encoding:'terrarium', tileSize:256, maxzoom:15,
+      tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'] });
+  }
+});
+
+/* ---------------- spin engine ---------------- */
+let spinning = true, dir = 1, speed = 3, last = performance.now(), interacting = false;
+function frame(now){
+  const dt = (now - last)/1000; last = now;
+  if(spinning && !interacting && !recording){   // while recording, recLoop owns rotation (frame-locked)
+    const c = map.getCenter();
+    c.lng = ((c.lng + dir*speed*dt + 180) % 360) - 180;
+    map.setCenter(c);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+map.on('mousedown', ()=>interacting=true);
+map.on('touchstart', ()=>interacting=true);
+window.addEventListener('mouseup', ()=>interacting=false);
+window.addEventListener('touchend', ()=>interacting=false);
+
+/* ---------------- helpers ---------------- */
+const $ = id => document.getElementById(id);
+function applyOffset(pct){
+  const h = map.getContainer().clientHeight;
+  map.setPadding({ top:0, left:0, right:0, bottom: Math.round(h * pct/100) });
+}
+function setSpin(on){ spinning=on; $('spinBtn').classList.toggle('on',on); $('spinBtn').innerHTML = on?'Auto&nbsp;⟳':'Paused'; }
+function updateLoop(){
+  $('loopSecs').textContent = speed>0 ? (360/speed).toFixed(1) : '∞';
+  const info = $('loopInfo');
+  if(info){
+    if(speed>0){
+      const fps = +$('fps').value;
+      const N = Math.max(1, Math.round(360*fps/speed));
+      info.textContent = 'Perfect loop = '+N+' frames · '+(N/fps).toFixed(1)+'s';
+    } else { info.textContent = 'Set a speed above 0 for a loop'; }
+  }
+}
+
+/* ---------------- rotation controls ---------------- */
+$('spinBtn').onclick = ()=> setSpin(!spinning);
+$('dirBtn').onclick = ()=> dir *= -1;
+$('speed').oninput = e => { speed=+e.target.value; $('speedVal').textContent = speed+'°/s'; updateLoop(); };
+$('fps').addEventListener('change', updateLoop);
+
+/* ---------------- composition ---------------- */
+$('zoom').oninput = e => { map.setZoom(+e.target.value); $('zoomVal').textContent=(+e.target.value).toFixed(2); };
+map.on('zoom', ()=>{ $('zoom').value = map.getZoom(); $('zoomVal').textContent = map.getZoom().toFixed(2); });
+$('offset').oninput = e => { const v=+e.target.value; applyOffset(v); $('offsetVal').textContent=(v>=0?'+':'')+v+'%'; };
+$('starsChk').onchange = e=> $('space').classList.toggle('off', !e.target.checked);
+
+/* ---------------- intro / outro motion (slide + scale) ---------------- */
+// slideFrac and scaleVal drive both the live view (CSS) and the recorded frames (compositor).
+function applyTransform(){
+  const parts=[];
+  if(slideFrac) parts.push(`translateY(${slideFrac*100}%)`);
+  if(scaleVal!==1) parts.push(`scale(${scaleVal})`);
+  map.getContainer().style.transform = parts.join(' ');
+}
+function applySlide(f){ slideFrac=f; applyTransform(); }
+function setScale(s){ scaleVal=s; applyTransform(); }
+
+let motionAnim=null, slideDur=5.5;
+const easeInOut = t=> t*t*t*(t*(t*6-15)+10);   // smootherstep: zero velocity AND acceleration at both ends
+$('slideDur').oninput = e=>{ slideDur=+e.target.value; $('slideDurVal').textContent=slideDur+'s'; };
+
+function animate(apply, from, to){
+  if(motionAnim) cancelAnimationFrame(motionAnim);
+  const t0=performance.now(), ms=slideDur*1000;
+  (function tick(now){
+    const p=Math.min(1,(now-t0)/ms);
+    apply(from + (to-from)*easeInOut(p));
+    motionAnim = p<1 ? requestAnimationFrame(tick) : null;
+  })(t0);
+}
+$('animIn').onclick  = ()=> animate(applySlide, 1.15, 0);    // slide up from below → center
+$('animOut').onclick = ()=> animate(applySlide, 0, -1.15);   // slide from center → off the top
+$('scaleIn').onclick = ()=>{                                 // grow from tiny → default
+  setSpin(true); set3D(false); applySlide(0);
+  // start tilted + tiny, ease to upright + full → normal horizontal spin.
+  // Tilt scales with duration so a slower grow gets more rotation (doesn't hover on one angle).
+  const S0 = 0.05, B0 = Math.max(-90, -5.5 * slideDur);
+  map.jumpTo({ center:[10,25], zoom:1.15, pitch:0, bearing:B0 });
+  setScale(S0);
+  if(motionAnim) cancelAnimationFrame(motionAnim);
+  const t0=performance.now(), ms=slideDur*1000;
+  const lnS0 = Math.log(S0);
+  (function tick(now){
+    const p=Math.min(1,(now-t0)/ms), e=easeInOut(p);
+    setScale(Math.exp(lnS0*(1-e)));   // geometric interpolation → uniform *perceived* growth
+    map.setBearing(B0*(1-e));         // tilt → 0
+    motionAnim = p<1 ? requestAnimationFrame(tick) : null;
+  })(t0);
+};
+
+/* ---------------- fly / snap ---------------- */
+let flyDur = 3.5, flyZoom = 4.4;
+$('flydur').oninput = e => { flyDur=+e.target.value; $('flydurVal').textContent=flyDur+'s'; };
+$('flyzoom').oninput = e => { flyZoom=+e.target.value; $('flyzoomVal').textContent=flyZoom.toFixed(1); };
+function set3D(on){ map.setTerrain(on ? { source:'dem', exaggeration:1.5 } : null); }
+
+function flyTo(lng, lat, z){        // normal top-down flight
+  setSpin(false); set3D(false);
+  map.flyTo({ center:[lng,lat], zoom: z ?? flyZoom, pitch:0, bearing:0, duration: flyDur*1000, curve:1.6, essential:true });
+}
+function flyTo3D(lng, lat, z, pitch, bearing){   // tilted terrain flight
+  setSpin(false); set3D(true);
+  map.flyTo({ center:[lng,lat], zoom:z, pitch, bearing, duration: flyDur*1000, curve:1.5, essential:true });
+}
+$('goCoord').onclick = ()=>{
+  const lat=parseFloat($('lat').value), lng=parseFloat($('lng').value);
+  if(!isNaN(lat)&&!isNaN(lng)) flyTo(lng,lat);
+};
+$('resetBtn').onclick = ()=>{
+  applySlide(0);   // recenter if the globe was animated off-screen
+  set3D(false);
+  map.flyTo({ center:[10,25], zoom:1.15, pitch:0, bearing:0, duration:2200, curve:1.5, essential:true });
+  setTimeout(()=>setSpin(true), 2300);
+};
+
+/* presets */
+// [name, lng, lat, zoom?]  — zoom optional; continents use a lower zoom so they fit the frame.
+const PRESETS = [
+  ['South America',-60,-18,3.3],
+  ['Tokyo',139.767,35.681],['New York',-74.006,40.713],['London',-0.1276,51.507],
+  ['Paris',2.3522,48.857],['Dubai',55.270,25.204],['Sydney',151.209,-33.868],
+  ['Cape Town',18.424,-33.925],['Rio',-43.196,-22.907],['San Francisco',-122.419,37.775]
+];
+const presetsEl = $('presets');
+PRESETS.forEach(([n,lng,lat,z])=>{
+  const b=document.createElement('button'); b.textContent=n;
+  b.onclick=()=>flyTo(lng,lat,z); presetsEl.appendChild(b);
+});
+// 3D tilted terrain view over the Andes (Machu Picchu region — dramatic green ridges).
+const b3d=document.createElement('button'); b3d.textContent='S. America 3D';
+b3d.onclick=()=>flyTo3D(-72.545,-13.163, 11.5, 72, 25);
+presetsEl.appendChild(b3d);
+
+/* search via Nominatim */
+const searchEl=$('search'), resultsEl=$('results');
+let searchTimer;
+searchEl.addEventListener('input', ()=>{
+  clearTimeout(searchTimer);
+  const q=searchEl.value.trim();
+  if(q.length<3){ resultsEl.classList.remove('show'); return; }
+  searchTimer=setTimeout(async ()=>{
+    try{
+      const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`);
+      const data=await r.json();
+      resultsEl.innerHTML='';
+      data.forEach(d=>{
+        const el=document.createElement('div'); el.textContent=d.display_name;
+        el.onclick=()=>{ flyTo(+d.lon,+d.lat); resultsEl.classList.remove('show'); searchEl.value=d.display_name.split(',')[0]; };
+        resultsEl.appendChild(el);
+      });
+      resultsEl.classList.toggle('show', data.length>0);
+    }catch(e){}
+  },350);
+});
+$('goSearch').onclick = ()=>{ const first=resultsEl.querySelector('div'); if(first) first.click(); };
+document.addEventListener('click', e=>{ if(!e.target.closest('.search-wrap')) resultsEl.classList.remove('show'); });
+
+/* keyboard: Space toggles spin (unless typing) */
+window.addEventListener('keydown', e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if(e.key===' '){ e.preventDefault(); setSpin(!spinning); }
+});
+
+/* device size */
+$('device').onchange = e=>{
+  const [w,h]=e.target.value.split('x');
+  document.documentElement.style.setProperty('--phone-w', w+'px');
+  document.documentElement.style.setProperty('--phone-h', h+'px');
+  setTimeout(()=>{ map.resize(); applyOffset(+$('offset').value); }, 60);
+};
+
+/* source / token */
+$('src').onchange = e=>{
+  currentSrc=e.target.value;
+  $('tokenRow').style.display = currentSrc==='mapbox' ? 'flex':'none';
+  reStyle();
+};
+$('applyToken').onclick = ()=>{ const t=$('token').value.trim(); if(t) MAPBOX_TOKEN=t; reStyle(); };
+function reStyle(){
+  const cam = { center:map.getCenter(), zoom:map.getZoom(), pitch:map.getPitch(), bearing:map.getBearing() };
+  map.setStyle(styleFor(currentSrc));
+  map.once('style.load', ()=>{ map.jumpTo(cam); });   // projection + dem re-applied by the persistent style.load handler
+}
+
+/* ---------------- in-browser recorder → MP4 (H.264) ---------------- */
+// Pick the best container/codec this browser can encode natively.
+function pickMime(){
+  const c = [
+    'video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1.42E01E','video/mp4;codecs=h264','video/mp4',
+    'video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'
+  ];
+  for(const m of c){ if(window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
+  return '';
+}
+const REC_MIME = pickMime();
+const REC_EXT = REC_MIME.startsWith('video/mp4') ? 'mp4' : 'webm';
+$('fmt').textContent = REC_MIME ? (REC_EXT==='mp4' ? 'MP4 · H.264' : 'WebM (browser can’t make MP4 — use Chrome/Safari)') : 'unsupported';
+
+// Offscreen compositor: stars + gradient + the live map canvas.
+const comp = document.createElement('canvas');
+const cctx = comp.getContext('2d');
+let stars = [];
+let slideFrac = 0;   // 0 = centered, +1 = one frame-height below, -1 = one above (globe slides over stars)
+let scaleVal = 1;    // 1 = default size; smaller = globe scaled down (grow-in animation)
+function seedStars(){
+  stars = [];
+  for(let i=0;i<160;i++){
+    stars.push({ x:Math.random(), y:Math.random(), r:Math.random()*1.4+0.4, a:Math.random()*0.6+0.25 });
+  }
+}
+seedStars();
+function drawComposite(){
+  const src = map.getCanvas();
+  if(comp.width!==src.width || comp.height!==src.height){ comp.width=src.width; comp.height=src.height; }
+  const w=comp.width, h=comp.height;
+  if($('starsChk').checked){
+    const g = cctx.createRadialGradient(w*0.5,h*0.42, 0, w*0.5,h*0.42, Math.max(w,h)*0.8);
+    g.addColorStop(0,'#0f1830'); g.addColorStop(0.45,'#0a1022'); g.addColorStop(1,'#060a16');
+    cctx.fillStyle=g; cctx.fillRect(0,0,w,h);
+    const s = Math.min(w,h)/393;
+    for(const st of stars){ cctx.globalAlpha=st.a; cctx.beginPath();
+      cctx.arc(st.x*w, st.y*h, st.r*s, 0, 6.283); cctx.fillStyle='#fff'; cctx.fill(); }
+    cctx.globalAlpha=1;
+  } else {
+    cctx.fillStyle='#05070f'; cctx.fillRect(0,0,w,h);
+  }
+  const sw=w*scaleVal, sh=h*scaleVal;                 // scale around center, then slide
+  cctx.drawImage(src, (w-sw)/2, (h-sh)/2 + slideFrac*h, sw, sh);
+}
+
+$('fmt').textContent = REC_MIME ? (REC_EXT==='mp4' ? 'MP4 · H.264' : 'WebM (use Chrome/Safari for MP4)') : 'unsupported';
+
+let recording=false, recorder=null, recStream=null, recTrack=null, chunks=[], recBytes=0, recStartT=0, capBytes=200*1024*1024, timeTimer=null;
+let recFrameMs=1000/30, recAccum=0, recLast=0;
+let recPerfect=false, recTargetFrames=0, recFrameCount=0, recStep=0;
+
+$('bitrate').oninput = e=>{ $('bitrateVal').textContent = e.target.value+' Mbps'; };
+$('cap').onchange = e=>{ capBytes = (+e.target.value)*1024*1024; };
+function fmtTime(ms){ const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+function downloadBlob(blob, ext){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const ts=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  a.href=url; a.download=`globe-spin-${ts}.${ext}`; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 4000);
+}
+
+// Spin one silent revolution, waiting for tiles to settle, so nothing pops in during capture.
+function warmUpTiles(){
+  return new Promise(resolve=>{
+    const lat = map.getCenter().lat, start = map.getCenter().lng;
+    let a = 0;
+    function step(){
+      if(a > 360){ map.setCenter([start, lat]); setTimeout(resolve, 200); return; }
+      map.setCenter([((start + a + 180) % 360) - 180, lat]);
+      let done=false;
+      const finish=()=>{ if(done) return; done=true; map.off('idle',finish); clearTimeout(to); a+=24; step(); };
+      const to=setTimeout(finish, 1500);
+      map.on('idle', finish);
+    }
+    step();
+  });
+}
+
+// Frame-locked capture: advance a fixed angle each frame, then push one frame to the recorder.
+function recLoop(now){
+  if(!recording) return;
+  requestAnimationFrame(recLoop);
+  if(!recLast){ recLast=now; return; }
+  recAccum += now - recLast; recLast = now;
+  if(recAccum + 1.5 < recFrameMs) return;
+  recAccum -= recFrameMs;
+  if(recAccum > recFrameMs*1.5) recAccum = 0;
+  if(spinning && !interacting){
+    const c = map.getCenter();
+    const stepDeg = recPerfect ? recStep : dir*speed/(1000/recFrameMs);
+    c.lng = ((c.lng + stepDeg + 180) % 360) - 180;
+    map.setCenter(c);
+  }
+  drawComposite();
+  if(recTrack && recTrack.requestFrame) recTrack.requestFrame();
+  if(recPerfect){
+    recFrameCount++;
+    $('recStat').textContent = 'Loop '+recFrameCount+'/'+recTargetFrames+' frames';
+    if(recFrameCount >= recTargetFrames) stopRec();
+  } else {
+    $('recStat').textContent = (recBytes/1048576).toFixed(1)+' MB';
+  }
+}
+
+async function startRec(){
+  if(recording) return;
+  if(!REC_MIME){ alert('This browser can’t record video. Try Chrome or Safari.'); return; }
+  if($('preload').checked){ $('recBtn').textContent='Warming…'; $('recBtn').disabled=true; await warmUpTiles(); $('recBtn').disabled=false; }
+  drawComposite();
+  const fps = +$('fps').value;
+  recFrameMs = 1000/fps; recAccum = 0; recLast = 0;
+  recStream = comp.captureStream(0);
+  recTrack = recStream.getVideoTracks()[0];
+  try{
+    recorder = new MediaRecorder(recStream, { mimeType:REC_MIME, videoBitsPerSecond:(+$('bitrate').value)*1_000_000 });
+  }catch(err){ alert('Recorder error: '+err.message); return; }
+  chunks=[]; recBytes=0;
+  recorder.ondataavailable = ev=>{ if(ev.data && ev.data.size){ chunks.push(ev.data); recBytes+=ev.data.size; if(recBytes>=capBytes) stopRec(); } };
+  recorder.onstop = finishRec;
+  recPerfect = $('autoLoop').checked && spinning && speed>0;
+  if(recPerfect){ recTargetFrames = Math.max(1, Math.round(360*fps/speed)); recStep = dir*(360/recTargetFrames); recFrameCount = 0; }
+  recorder.start(1000);
+  recording=true; recStartT=performance.now();
+  requestAnimationFrame(recLoop);
+  $('recBtn').textContent='■ Stop'; $('recBtn').classList.remove('primary'); $('recBtn').style.background='#c0392b'; $('recBtn').style.borderColor='#c0392b';
+  timeTimer = setInterval(()=>$('recTime').textContent=fmtTime(performance.now()-recStartT), 250);
+}
+function stopRec(){
+  if(!recording) return;
+  recording=false; clearInterval(timeTimer);
+  try{ recorder.stop(); }catch(e){}
+  if(recStream) recStream.getTracks().forEach(t=>t.stop());
+}
+function finishRec(){
+  const blob = new Blob(chunks, { type: REC_MIME });
+  downloadBlob(blob, REC_EXT);
+  $('recBtn').textContent='● Record'; $('recBtn').classList.add('primary'); $('recBtn').style.background=''; $('recBtn').style.borderColor='';
+  $('recStat').innerHTML='Saved '+(blob.size/1048576).toFixed(1)+' MB · <span id="fmt">'+REC_EXT.toUpperCase()+'</span>';
+  $('recTime').textContent='0:00';
+}
+$('recBtn').onclick = ()=> recording ? stopRec() : startRec();
+
+/* init */
+map.on('load', ()=>{ applyOffset(12); setSpin(true); updateLoop(); });
+</script>
+</body>
+</html>
